@@ -34,6 +34,7 @@ func main() {
 	// Routes
 	router.GET("/", hello)
 	router.GET("/sample", sampleController.GetSample)
+	router.POST("/sample", sampleController.PostSample)
 
 	// Start server
 	if err := router.Start(":8080"); err != nil && !errors.Is(err, http.ErrServerClosed) {
