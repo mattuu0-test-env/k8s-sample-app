@@ -167,7 +167,7 @@ function App() {
   }, []);
 
   useEffect(() => {
-    let timer: NodeJS.Timeout;
+    let timer: ReturnType<typeof setInterval>;
     if (isRunning) {
       timer = setInterval(() => {
         sendRequest();
