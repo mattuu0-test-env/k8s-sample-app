@@ -40,11 +40,13 @@ function App() {
   });
   const [logs, setLogs] = useState<Log[]>([]);
   const [chartData, setChartData] = useState<ChartData[]>([]);
-  const logsEndRef = useRef<HTMLDivElement>(null);
+  const logsContainerRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll logs
   useEffect(() => {
-    logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (logsContainerRef.current) {
+      logsContainerRef.current.scrollTop = logsContainerRef.current.scrollHeight;
+    }
   }, [logs]);
 
   const sendRequest = useCallback(async () => {
@@ -58,14 +60,13 @@ function App() {
       const latency = Math.round(endTime - startTime);
       const timestamp = new Date().toLocaleTimeString();
 
-      // Update Chart Data (Keep last 50 points)
+      // Update Chart Data (Keep last 200 points)
       setChartData((prev) => {
         const newData = [...prev, { time: timestamp, latency }];
-        return newData.slice(-50);
+        return newData.slice(-200);
       });
 
       if (res.ok) {
-        // const data = await res.json(); // Data is not used in log message anymore for GET
         setStats((prev) => ({
           ...prev,
           total: prev.total + 1,
@@ -74,7 +75,7 @@ function App() {
         }));
         addLog({
           status: "success",
-          message: "Success", // Changed message
+          message: "Success",
           latency,
         });
       } else {
@@ -115,7 +116,7 @@ function App() {
     };
     setLogs((prev) => {
       const newLogs = [...prev, newLog];
-      return newLogs.slice(-50); // Keep last 50 logs
+      return newLogs.slice(-200); // Keep last 200 logs
     });
   };
 
@@ -124,7 +125,7 @@ function App() {
     if (isRunning) {
       timer = setInterval(() => {
         sendRequest();
-      }, intervalMs); // Use intervalMs
+      }, intervalMs);
     }
     return () => clearInterval(timer);
   }, [isRunning, intervalMs, sendRequest]);
@@ -229,7 +230,7 @@ function App() {
           {/* Latency Chart */}
           <div className="bg-white rounded-xl shadow-md p-6 h-96 flex flex-col">
             <h3 className="text-lg font-medium text-gray-900 mb-4">
-              Response Time (Last 50 requests)
+              Response Time (Last 200 requests)
             </h3>
             <div className="flex-1 min-h-0">
               <ResponsiveContainer width="100%" height="100%">
@@ -250,7 +251,7 @@ function App() {
                     stroke="#8884d8"
                     strokeWidth={2}
                     dot={false}
-                    animationDuration={300}
+                    isAnimationActive={false}
                   />
                 </LineChart>
               </ResponsiveContainer>
@@ -261,10 +262,13 @@ function App() {
           <div className="bg-white rounded-xl shadow-md overflow-hidden flex flex-col h-96">
             <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
               <h3 className="text-lg font-medium text-gray-900">
-                Request Log (Last 50)
+                Request Log (Last 200)
               </h3>
             </div>
-            <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-gray-900 text-sm font-mono">
+            <div
+              ref={logsContainerRef}
+              className="flex-1 overflow-y-auto p-4 space-y-2 bg-gray-900 text-sm font-mono"
+            >
               {logs.length === 0 && (
                 <p className="text-gray-500 text-center italic mt-4">
                   No requests sent yet.
@@ -295,7 +299,6 @@ function App() {
                   </span>
                 </div>
               ))}
-              <div ref={logsEndRef} />
             </div>
           </div>
         </div>
