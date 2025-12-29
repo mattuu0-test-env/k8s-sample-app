@@ -30,11 +30,7 @@ function App() {
     const startTime = performance.now();
     try {
       const res = await fetch("/app/sample", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ message: `Request from frontend at ${new Date().toISOString()}` }),
+        method: "GET",
       });
 
       const endTime = performance.now();
