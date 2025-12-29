@@ -1,9 +1,19 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
 
 type Stat = {
   total: number;
   success: number;
   error: number;
+  totalLatency: number;
 };
 
 type Log = {
@@ -14,11 +24,22 @@ type Log = {
   latency: number;
 };
 
+type ChartData = {
+  time: string;
+  latency: number;
+};
+
 function App() {
-  const [intervalSec, setIntervalSec] = useState<number>(1);
+  const [intervalMs, setIntervalMs] = useState<number>(1000);
   const [isRunning, setIsRunning] = useState<boolean>(false);
-  const [stats, setStats] = useState<Stat>({ total: 0, success: 0, error: 0 });
+  const [stats, setStats] = useState<Stat>({
+    total: 0,
+    success: 0,
+    error: 0,
+    totalLatency: 0,
+  });
   const [logs, setLogs] = useState<Log[]>([]);
+  const [chartData, setChartData] = useState<ChartData[]>([]);
   const logsEndRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll logs
@@ -35,17 +56,25 @@ function App() {
 
       const endTime = performance.now();
       const latency = Math.round(endTime - startTime);
+      const timestamp = new Date().toLocaleTimeString();
+
+      // Update Chart Data (Keep last 50 points)
+      setChartData((prev) => {
+        const newData = [...prev, { time: timestamp, latency }];
+        return newData.slice(-50);
+      });
 
       if (res.ok) {
-        const data = await res.json();
+        // const data = await res.json(); // Data is not used in log message anymore for GET
         setStats((prev) => ({
           ...prev,
           total: prev.total + 1,
           success: prev.success + 1,
+          totalLatency: prev.totalLatency + latency,
         }));
         addLog({
           status: "success",
-          message: `ID: ${data.id} - Created successfully`,
+          message: "Success", // Changed message
           latency,
         });
       } else {
@@ -53,6 +82,7 @@ function App() {
           ...prev,
           total: prev.total + 1,
           error: prev.error + 1,
+          totalLatency: prev.totalLatency + latency,
         }));
         addLog({
           status: "error",
@@ -62,15 +92,17 @@ function App() {
       }
     } catch (error) {
       const endTime = performance.now();
+      const latency = Math.round(endTime - startTime);
       setStats((prev) => ({
         ...prev,
         total: prev.total + 1,
         error: prev.error + 1,
+        totalLatency: prev.totalLatency + latency,
       }));
       addLog({
         status: "error",
         message: error instanceof Error ? error.message : "Network Error",
-        latency: Math.round(endTime - startTime),
+        latency,
       });
     }
   }, []);
@@ -92,32 +124,37 @@ function App() {
     if (isRunning) {
       timer = setInterval(() => {
         sendRequest();
-      }, intervalSec * 1000);
+      }, intervalMs); // Use intervalMs
     }
     return () => clearInterval(timer);
-  }, [isRunning, intervalSec, sendRequest]);
+  }, [isRunning, intervalMs, sendRequest]);
 
   const toggleRunning = () => {
     setIsRunning(!isRunning);
   };
 
   const resetStats = () => {
-    setStats({ total: 0, success: 0, error: 0 });
+    setStats({ total: 0, success: 0, error: 0, totalLatency: 0 });
     setLogs([]);
+    setChartData([]);
   };
 
-  const errorRate = stats.total > 0 ? ((stats.error / stats.total) * 100).toFixed(2) : "0.00";
+  const errorRate =
+    stats.total > 0 ? ((stats.error / stats.total) * 100).toFixed(2) : "0.00";
+  const avgLatency =
+    stats.total > 0 ? (stats.totalLatency / stats.total).toFixed(2) : "0.00";
 
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8 font-sans">
-      <div className="max-w-4xl mx-auto space-y-8">
+      <div className="max-w-6xl mx-auto space-y-8">
         {/* Header */}
         <div className="text-center">
           <h1 className="text-3xl font-extrabold text-gray-900 sm:text-4xl">
             Load Generator Dashboard
           </h1>
           <p className="mt-2 text-lg text-gray-600">
-            Send periodic requests to <code className="bg-gray-200 px-1 rounded">/app/sample</code>
+            Send periodic GET requests to{" "}
+            <code className="bg-gray-200 px-1 rounded">/app/sample</code>
           </p>
         </div>
 
@@ -125,14 +162,14 @@ function App() {
         <div className="bg-white rounded-xl shadow-md p-6 flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center space-x-4 w-full md:w-auto">
             <label className="text-gray-700 font-medium whitespace-nowrap">
-              Interval (sec):
+              Interval (ms):
             </label>
             <input
               type="number"
-              min="0.1"
-              step="0.1"
-              value={intervalSec}
-              onChange={(e) => setIntervalSec(parseFloat(e.target.value) || 1)}
+              min="10"
+              step="10"
+              value={intervalMs}
+              onChange={(e) => setIntervalMs(parseInt(e.target.value) || 100)}
               disabled={isRunning}
               className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border"
             />
@@ -159,37 +196,107 @@ function App() {
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <StatCard title="Total Requests" value={stats.total} color="bg-blue-50 text-blue-700" />
-          <StatCard title="Success" value={stats.success} color="bg-green-50 text-green-700" />
-          <StatCard title="Errors" value={stats.error} color="bg-red-50 text-red-700" />
-          <StatCard title="Error Rate" value={`${errorRate}%`} color="bg-yellow-50 text-yellow-700" />
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <StatCard
+            title="Total Requests"
+            value={stats.total}
+            color="bg-blue-50 text-blue-700"
+          />
+          <StatCard
+            title="Success"
+            value={stats.success}
+            color="bg-green-50 text-green-700"
+          />
+          <StatCard
+            title="Errors"
+            value={stats.error}
+            color="bg-red-50 text-red-700"
+          />
+          <StatCard
+            title="Error Rate"
+            value={`${errorRate}%`}
+            color="bg-yellow-50 text-yellow-700"
+          />
+          <StatCard
+            title="Avg Latency"
+            value={`${avgLatency}ms`}
+            color="bg-indigo-50 text-indigo-700"
+          />
         </div>
 
-        {/* Logs */}
-        <div className="bg-white rounded-xl shadow-md overflow-hidden flex flex-col h-96">
-          <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
-            <h3 className="text-lg font-medium text-gray-900">Request Log (Last 50)</h3>
+        {/* Charts & Logs Container */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Latency Chart */}
+          <div className="bg-white rounded-xl shadow-md p-6 h-96 flex flex-col">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">
+              Response Time (Last 50 requests)
+            </h3>
+            <div className="flex-1 min-h-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="time" hide />
+                  <YAxis
+                    label={{
+                      value: "ms",
+                      angle: -90,
+                      position: "insideLeft",
+                    }}
+                  />
+                  <Tooltip />
+                  <Line
+                    type="monotone"
+                    dataKey="latency"
+                    stroke="#8884d8"
+                    strokeWidth={2}
+                    dot={false}
+                    animationDuration={300}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
           </div>
-          <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-gray-900 text-sm font-mono">
-            {logs.length === 0 && (
-              <p className="text-gray-500 text-center italic mt-4">No requests sent yet.</p>
-            )}
-            {logs.map((log) => (
-              <div key={log.id} className="flex items-start space-x-3 border-b border-gray-800 pb-2 last:border-0">
-                <span className="text-gray-500 shrink-0">[{log.timestamp}]</span>
-                <span
-                  className={`font-bold shrink-0 ${
-                    log.status === "success" ? "text-green-400" : "text-red-400"
-                  }`}
+
+          {/* Logs */}
+          <div className="bg-white rounded-xl shadow-md overflow-hidden flex flex-col h-96">
+            <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
+              <h3 className="text-lg font-medium text-gray-900">
+                Request Log (Last 50)
+              </h3>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-gray-900 text-sm font-mono">
+              {logs.length === 0 && (
+                <p className="text-gray-500 text-center italic mt-4">
+                  No requests sent yet.
+                </p>
+              )}
+              {logs.map((log) => (
+                <div
+                  key={log.id}
+                  className="flex items-start space-x-3 border-b border-gray-800 pb-2 last:border-0"
                 >
-                  {log.status.toUpperCase()}
-                </span>
-                <span className="text-gray-300 truncate flex-1">{log.message}</span>
-                <span className="text-gray-500 shrink-0">{log.latency}ms</span>
-              </div>
-            ))}
-            <div ref={logsEndRef} />
+                  <span className="text-gray-500 shrink-0">
+                    [{log.timestamp}]
+                  </span>
+                  <span
+                    className={`font-bold shrink-0 ${
+                      log.status === "success"
+                        ? "text-green-400"
+                        : "text-red-400"
+                    }`}
+                  >
+                    {log.status.toUpperCase()}
+                  </span>
+                  <span className="text-gray-300 truncate flex-1">
+                    {log.message}
+                  </span>
+                  <span className="text-gray-500 shrink-0">
+                    {log.latency}ms
+                  </span>
+                </div>
+              ))}
+              <div ref={logsEndRef} />
+            </div>
           </div>
         </div>
       </div>
@@ -197,8 +304,18 @@ function App() {
   );
 }
 
-const StatCard = ({ title, value, color }: { title: string; value: string | number; color: string }) => (
-  <div className={`rounded-xl shadow-sm p-5 flex flex-col items-center justify-center text-center ${color}`}>
+const StatCard = ({
+  title,
+  value,
+  color,
+}: {
+  title: string;
+  value: string | number;
+  color: string;
+}) => (
+  <div
+    className={`rounded-xl shadow-sm p-5 flex flex-col items-center justify-center text-center ${color}`}
+  >
     <dt className="text-sm font-medium truncate opacity-80">{title}</dt>
     <dd className="mt-1 text-3xl font-semibold tracking-tight">{value}</dd>
   </div>
