@@ -24,6 +24,7 @@ type Log = {
   statusCode?: number;
   message: string;
   latency?: number;
+  hostname?: string;
 };
 
 type ChartData = {
@@ -89,12 +90,24 @@ function App() {
     let statusCode = 0;
     let status: "success" | "error" = "error";
     let latency = 0;
+    let hostname = "unknown";
 
     try {
+      // Fetch Sample
       const res = await fetch("/app/sample", {
         method: "GET",
       });
       statusCode = res.status;
+
+      // Fetch Hostname
+      try {
+        const hostRes = await fetch("/app/hostname");
+        if (hostRes.ok) {
+          hostname = await hostRes.text();
+        }
+      } catch (e) {
+        console.error("Failed to fetch hostname", e);
+      }
 
       const endTime = performance.now();
       latency = Math.round(endTime - startTime);
@@ -135,6 +148,7 @@ function App() {
                   ? "Success"
                   : `Status: ${res.status} ${res.statusText}`,
                 latency,
+                hostname,
               }
             : log
         )
@@ -399,6 +413,9 @@ function App() {
               <div className="flex-1 px-4 py-2 border-r border-gray-200">
                 Name
               </div>
+              <div className="w-32 px-4 py-2 border-r border-gray-200">
+                Hostname
+              </div>
               <div className="w-24 px-4 py-2 border-r border-gray-200">
                 Type
               </div>
@@ -453,6 +470,9 @@ function App() {
                     <span className="text-gray-400 ml-2 font-light">
                       /app/sample
                     </span>
+                  </div>
+                  <div className="w-32 px-4 py-1.5 border-r border-gray-100 text-gray-600 truncate flex items-center">
+                    {log.hostname || "-"}
                   </div>
                   <div className="w-24 px-4 py-1.5 border-r border-gray-100 text-gray-500 flex items-center">
                     json
