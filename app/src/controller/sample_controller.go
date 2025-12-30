@@ -3,6 +3,7 @@ package controller
 import (
 	"app/service"
 	"net/http"
+	"os"
 
 	"github.com/labstack/echo/v4"
 )
@@ -13,6 +14,14 @@ type SampleController struct {
 
 type CreateSampleRequest struct {
 	Message string `json:"message"`
+}
+
+func (c *SampleController) GetHostname(ctx echo.Context) error {
+	data, err := os.ReadFile("/var/www/hostname")
+	if err != nil {
+		return ctx.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to read hostname file"})
+	}
+	return ctx.String(http.StatusOK, string(data))
 }
 
 func (c *SampleController) GetSample(ctx echo.Context) error {

@@ -33,6 +33,7 @@ func main() {
 
 	// Routes
 	router.GET("/", hello)
+	router.GET("/hostname", sampleController.GetHostname)
 	router.GET("/sample", sampleController.GetSample)
 	router.POST("/sample", sampleController.PostSample)
 
